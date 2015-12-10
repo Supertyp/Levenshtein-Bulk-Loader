@@ -1,0 +1,331 @@
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <title>Levenshtein bulk loader</title>
+  
+<script>
+
+// to select individual words
+// on load all 8 are displayed
+comparingIndex = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+csv = [];
+dictOrderedByAverage = {};
+
+function handleFiles(files) {
+	// Check for the various File API support.
+	if (window.FileReader) {
+		// FileReader are supported.
+		getAsText(files[0]);
+	} else {
+		alert('FileReader are not supported in this browser.');
+	}
+}
+
+function getAsText(fileToRead) {
+	var reader = new FileReader();
+	// Handle errors load
+	reader.onload = loadHandler;
+	reader.onerror = errorHandler;
+	// Read file into memory as UTF-8      
+	reader.readAsText(fileToRead);
+}
+
+function loadHandler(event) {
+	csv = event.target.result;
+	processData(csv);             
+}
+
+function processData(csv, skipFirstLine) {
+    // empty list, pup. with line content
+    var lines = [];
+	
+	// split at linebreak
+    var allTextLines = csv.split(/\r\n|\n/);
+	
+	// count the lines
+    var numberOfLines = allTextLines.length;
+	
+    // for as many lines we got...
+	for (var i = 1; i < numberOfLines; i++) {
+		
+		// take one line from the top
+		var singleLanguageLine = allTextLines[i];
+		//alert(singleLanguageLine);
+		
+		//split it into single Words
+		var allLineWords = singleLanguageLine.split(",");
+		
+		// New list to take the words which are demanded from checkboxes
+		var allLineWordsShort = []
+		
+		// look up which checkboxes are checked in comparingIndex
+		for (var m = 0; m < comparingIndex.length; m++) {
+            var theIndex = allLineWords[comparingIndex[m]];
+		    allLineWordsShort.push(theIndex);
+		    }
+		
+		// create empty list for each line
+		liste = [];
+		
+		// add language name
+		liste.push(allLineWords[0])
+		
+		
+		// set number of words in the list
+		var numberOfWordsShort = allLineWordsShort.length;
+		
+		// go through the whole list, leave out language name, and compare to each word
+		for (var k = 1; k < numberOfWordsShort; k++) {
+		    var singleLineWord = allLineWordsShort[k];
+			
+			// if cell is empty, fill in value x 
+			if (singleLineWord.length < 1) {
+			    singleLineWord = "x";
+			}
+			
+			// compare with each word
+			for (var j = 1; j < numberOfWordsShort; j++) {
+				singleLineSecondWord = allLineWordsShort[j];
+
+				// if cell is empty, fill in value y
+				if (singleLineSecondWord.length < 1) {
+					singleLineSecondWord = "y";
+			    }
+				
+				if (j >= k) {
+				    // filters out all same-on-same comparisons
+				} else {
+				   
+		            // calculate levenshtein
+				    var levenshtein = getEditDistance(singleLineWord, singleLineSecondWord);
+					
+					liste.push(levenshtein.toString());
+				}
+			}
+			
+		}
+		// calculate the average of all values
+		var cumulativeOverlap = 0;
+		for (var n = 1; n < liste.length; n++) {
+		    var overlapOfWord = parseFloat(liste[n]);
+		    cumulativeOverlap = cumulativeOverlap + overlapOfWord;
+			}
+		var averageOverlapRaw = (cumulativeOverlap / (liste.length - 1));
+		var averageOverlap = Math.round(averageOverlapRaw * 100)/ 100;
+		liste.push(" avg.: " + averageOverlap.toString());
+		
+		// put all together in one list
+		lines.push(liste);
+		//alert("lets see");
+		orderListByAverage(liste, averageOverlap);
+		// draw table fill cells
+		//alert(lines);
+	    drawOutput(lines);
+		//alert(dictOrderedByAverage);
+	}
+}
+
+function orderListByAverage(liste, averageOverlap) {
+    dictOrderedByAverage[liste] = averageOverlap;
+	}
+
+function orderAndReturn() {
+	var sortable = [];
+	var sortableOutput = []
+    for (var vehicle in dictOrderedByAverage) {
+        sortable.push([vehicle, dictOrderedByAverage[vehicle]])
+		}
+    sortable.sort(function(a, b) {return b[1] - a[1]})
+	
+	for (var o = 0; o < sortable.length; o++) {
+	    //alert(sortable[o]);
+		
+	    var sortableSplit = sortable[o][0].split(",");
+		//alert (sortableSplit);
+		sortableOutput.push(sortableSplit);
+	}
+	
+    // fills the table
+	drawOutput(sortableOutput);
+	
+	// flush all data
+	sortableOutput = [];
+	dictOrderedByAverage = {};
+	}
+
+
+/*
+ * levenshtein Distance calculation
+ * the result is devided by the length of the word
+ */
+function getEditDistance(a, b) {
+
+    var c // Length of the longer of the two strings
+    if(a.length >= b.length) { c = a.length }
+    if (b.length > a.length) {c = b.length }
+
+    var matrix = [];
+
+    // Increment along the first column of each row
+    var i;
+    for(i = 0; i <= b.length; i++){
+        matrix[i] = [i];
+        }
+
+    // Increment each column in the first row
+    var j;
+    for(j = 0; j <= a.length; j++){
+        matrix[0][j] = j;
+        }
+
+    // Fill in the rest of the matrix
+    for(i = 1; i <= b.length; i++){
+        for(j = 1; j <= a.length; j++){
+            if(b.charAt(i-1) == a.charAt(j-1)){
+                matrix[i][j] = matrix[i-1][j-1];
+            } else {
+                matrix[i][j] = Math.min(matrix[i-1][j-1] + 1, // substitution
+                                 Math.min(matrix[i][j-1] + 1, // insertion
+                                          matrix[i-1][j] + 1)); // deletion
+                }
+            }
+        }
+	
+	// Populate table with overlap or Levenshtein distances
+	var result = 1 - (matrix[b.length][a.length]) / c;
+	if (result == 1) {
+	return "1.00";
+	}
+	else {
+	return Math.round(result*100)/100;
+	}
+}
+
+function errorHandler(evt) {
+	if(evt.target.error.name == "NotReadableError") {
+		alert("Canno't read file !");
+	}
+}
+
+function drawOutput(lines){
+	//Clear previous data
+	document.getElementById("output").innerHTML = "";
+	
+	// create a table variable which can be filled.
+	var table = document.createElement("table");
+	
+	// fill table row by row...
+	for (var i = 0; i < lines.length; i++) {
+		var row = table.insertRow(-1);
+		
+		// ... and fill the rows cell by cell.
+		for (var j = 0; j < lines[i].length; j++) {
+			var firstNameCell = row.insertCell(-1);
+			
+			// insert value for each cell
+			firstNameCell.appendChild(document.createTextNode(lines[i][j]));
+			
+			// style the cell
+			firstNameCell.style.backgroundColor = convertHex("#9999ff", lines[i][j]);
+		}
+	}
+	document.getElementById("output").appendChild(table);
+}
+
+function convertHex(hex,opacity){
+	hex = hex.replace('#','');
+	r = parseInt(hex.substring(0,2), 16);
+	g = parseInt(hex.substring(2,4), 16);
+	b = parseInt(hex.substring(4,6), 16);
+	
+	// Add Opacity to RGB to obtain RGBA
+	result = 'rgba('+r+','+g+','+b+','+opacity +')';
+	return result;
+}
+
+function changeArrangement() {
+    dictOrderedByAverage = {};
+    // create empty list to fill with checked elements
+    var allComparants = [];
+	
+	// the first element
+	allComparants.push(0);
+	
+	// all other elements, one by one
+	var mEB= document.getElementById("mEB").checked;
+	if (mEB == true) {
+	    allComparants.push(1);
+		}
+	var mEZ= document.getElementById("mEZ").checked;
+	if (mEZ == true) {
+	    allComparants.push(2);
+		}
+	var mYB= document.getElementById("mYB").checked;
+	if (mYB == true) {
+	    allComparants.push(3);
+		}
+	var mYZ= document.getElementById("mYZ").checked;
+	if (mYZ == true) {
+	    allComparants.push(4);
+		}
+	var fEB= document.getElementById("fEB").checked;
+	if (fEB == true) {
+	    allComparants.push(5);
+		}
+	var fEZ= document.getElementById("fEZ").checked;
+	if (fEZ == true) {
+	    allComparants.push(6);
+		}
+	var fYB= document.getElementById("fYB").checked;
+	if (fYB == true) {
+	    allComparants.push(7);
+		}
+	var fYZ= document.getElementById("fYZ").checked;
+	if (fYZ == true) {
+	    allComparants.push(8);
+		}
+
+	// update what to inlcude 
+	// global var comaringIndex
+	comparingIndex = allComparants;
+	
+	// rerun the evaluation
+	processData(csv)
+	
+}
+
+</script>
+</head>
+<body >
+    <form class="form-horizontal well">
+          <p style="font-family:arial;display:inline;font-weight:bold;color: green"> LEVENSHTEIN Bulk Loader</p>
+      <fieldset>
+          <label for="csvFileInput"> <strong>CSV File:</strong>
+          </label>
+          <input type="file" id="csvFileInput" onchange="handleFiles(this.files)" accept=".csv">
+        </div>
+      </fieldset>
+    </form>
+	<label> <strong> Compare: </strong>
+		    <input type="checkbox" id="mEB" value="1"> mEB
+			<pre style="display:inline;">   </pre>
+			<input type="checkbox" id="mEZ" value="2"> mEZ
+			<pre style="display:inline;">   </pre>
+			<input type="checkbox" id="mYB" value="3"> mYB
+			<pre style="display:inline;">   </pre>
+			<input type="checkbox" id="mYZ" value="4"> mYZ
+			<pre style="display:inline;">   </pre>
+			<input type="checkbox" id="fEB" value="5"> fEB
+			<pre style="display:inline;">   </pre>
+			<input type="checkbox" id="fEZ" value="6"> fEZ
+			<pre style="display:inline;">   </pre>
+			<input type="checkbox" id="fYB" value="7"> fYB
+			<pre style="display:inline;">   </pre>
+			<input type="checkbox" id="fYZ" value="8"> fYZ
+			<pre style="display:inline;">   </pre>
+			<button onclick="changeArrangement()">Re-Evaluate</button>
+			<button onclick="orderAndReturn()">Order by Average</button>
+    <div id="output">
+    </div>
+</body>
+</html>
